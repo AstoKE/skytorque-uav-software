@@ -2,7 +2,7 @@ from pymavlink import mavutil
 
 
 class PX4Interface:
-    def __init__(self, connection_string: str = "udpin:127.0.0.1:14540"):
+    def __init__(self, connection_string: str = "udpin:0.0.0.0:14540"):
         self.connection_string = connection_string
         self.master = None
         self.system_id = None
@@ -10,9 +10,10 @@ class PX4Interface:
 
     def connect(self):
         print(f"PX4 bağlantısı kuruluyor: {self.connection_string}")
+
         self.master = mavutil.mavlink_connection(self.connection_string)
 
-        hb = self.master.recv_match(type="HEARTBEAT", blocking=True, timeout=10)
+        hb = self.master.recv_match(type="HEARTBEAT", blocking=True, timeout=15)
         if hb is None:
             raise TimeoutError("Heartbeat alınamadı.")
 
@@ -55,11 +56,64 @@ class PX4Interface:
 
         if msg_type == "LOCAL_POSITION_NED":
             return {"type": "LOCAL_POSITION_NED", "x": msg.x, "y": msg.y, "z": msg.z}
+
         if msg_type == "ATTITUDE":
             return {"type": "ATTITUDE", "roll": msg.roll, "pitch": msg.pitch, "yaw": msg.yaw}
+
         if msg_type == "ALTITUDE":
             return {"type": "ALTITUDE", "relative": msg.altitude_relative}
+
         if msg_type == "BATTERY_STATUS":
             return {"type": "BATTERY_STATUS", "remaining": msg.battery_remaining}
 
         return None
+
+    def arm(self):
+        print("Arm komutu gönderiliyor...")
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            1, 0, 0, 0, 0, 0, 0
+        )
+
+    def disarm(self):
+        print("Disarm komutu gönderiliyor...")
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            0, 0, 0, 0, 0, 0, 0
+        )
+
+    def takeoff(self, altitude=3.0):
+        print(f"Takeoff komutu gönderiliyor... hedef irtifa: {altitude} m")
+
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+            0,
+            0, 0, 0, 0,
+            float('nan'), float('nan'),
+            altitude
+        )
+
+    def land(self):
+        print("Land komutu gönderiliyor...")
+
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_NAV_LAND,
+            0,
+            0, 0, 0, 0, 0, 0, 0
+        )
+
+    def get_relative_altitude(self, timeout=3):
+        msg = self.get_message(msg_types=["ALTITUDE"], timeout=timeout)
+        if msg is None:
+            return None
+        return msg.altitude_relative
