@@ -1,19 +1,18 @@
+import time
 from mavlink_bridge.px4_interface import PX4Interface
+from mission_manager.state_machine import MissionStateMachine
 
 
 def main():
-    px4 = PX4Interface()
+    px4 = PX4Interface("udpin:0.0.0.0:14540")
     px4.connect()
 
-    print("Heartbeat:")
-    for _ in range(3):
-        print(px4.read_heartbeat_status())
+    mission = MissionStateMachine(px4_interface=px4, target_altitude=3.0, hold_time=5.0)
 
-    print("Telemetri:")
-    for _ in range(10):
-        msg = px4.read_telemetry()
-        if msg:
-            print(msg)
+    running = True
+    while running:
+        running = mission.update()
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":
