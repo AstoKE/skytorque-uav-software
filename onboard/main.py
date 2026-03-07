@@ -7,12 +7,17 @@ def main():
     px4 = PX4Interface("udpin:0.0.0.0:14540")
     px4.connect()
 
-    mission = MissionStateMachine(px4_interface=px4, target_altitude=3.0, hold_time=5.0)
+    mission = MissionStateMachine(
+        px4_interface=px4,
+        target_altitude=3.0,
+        hold_time=5.0,
+        nav_target=(5.0, 0.0, -3.0)
+    )
 
     running = True
     while running:
         running = mission.update()
-        time.sleep(0.5)
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":

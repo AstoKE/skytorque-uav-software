@@ -155,3 +155,52 @@ class PX4Interface:
             0,
             0, 0, 0, 0, 0, 0, 0
         )
+
+    def get_local_position(self, timeout=3):
+        msg = self.get_message(msg_types=["LOCAL_POSITION_NED"], timeout=timeout, only_target=True)
+        if msg is None:
+            return None
+
+        return {
+            "x": msg.x,
+            "y": msg.y,
+            "z": msg.z
+        }
+
+    def go_to_local_position(self, x, y, z, yaw=0.0):
+        print(f"Local hedef gönderiliyor: x={x:.2f}, y={y:.2f}, z={z:.2f}")
+
+        type_mask = (
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_VZ_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_AX_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_AY_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_AZ_IGNORE |
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
+        )
+
+        self.master.mav.set_position_target_local_ned_send(
+            0,
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            type_mask,
+            x, y, z,
+            0, 0, 0,
+            0, 0, 0,
+            yaw, 0
+        )
+
+    def set_offboard_mode(self):
+        print("OFFBOARD moda geçiş komutu gönderiliyor...")
+
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+            0,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            6,   # PX4_CUSTOM_MAIN_MODE_OFFBOARD
+            0, 0, 0, 0, 0
+        )
