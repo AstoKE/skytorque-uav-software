@@ -204,3 +204,31 @@ class PX4Interface:
             6,   # PX4_CUSTOM_MAIN_MODE_OFFBOARD
             0, 0, 0, 0, 0
         )
+
+    def set_auto_loiter_mode(self):
+        print("AUTO_LOITER moda geçiş komutu gönderiliyor...")
+
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+            0,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            4,   # PX4_CUSTOM_MAIN_MODE_AUTO
+            3,   # PX4_CUSTOM_SUB_MODE_AUTO_LOITER
+            0, 0, 0, 0
+        )
+
+    def set_auto_land_mode(self):
+        print("AUTO_LAND moda geçiş komutu gönderiliyor...")
+
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+            0,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            4,   # PX4_CUSTOM_MAIN_MODE_AUTO
+            6,   # PX4_CUSTOM_SUB_MODE_AUTO_LAND
+            0, 0, 0, 0
+        )

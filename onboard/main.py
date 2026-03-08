@@ -11,14 +11,18 @@ def main():
         px4_interface=px4,
         target_altitude=3.0,
         hold_time=5.0,
-        nav_target=(5.0, 0.0, -3.0)
+        waypoints=[
+            (3.0, 0.0, -3.0),
+            (3.0, 3.0, -3.0),
+            (0.0, 3.0, -3.0),
+        ]
     )
 
     running = True
     while running:
         running = mission.update()
-        time.sleep(0.1)
-
+        time.sleep(0.05)
+        
 
 if __name__ == "__main__":
     main()

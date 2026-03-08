@@ -7,7 +7,7 @@ class MissionState(Enum):
     ARMING = "ARMING"
     TAKEOFF = "TAKEOFF"
     OFFBOARD_PREP = "OFFBOARD_PREP"
-    NAVIGATE = "NAVIGATE"
+    WAYPOINT_MISSION = "WAYPOINT_MISSION"
     HOLD = "HOLD"
     LANDING = "LANDING"
     COMPLETE = "COMPLETE"
@@ -15,17 +15,22 @@ class MissionState(Enum):
 
 
 class MissionStateMachine:
-    def __init__(self, px4_interface, target_altitude=3.0, hold_time=5.0, nav_target=(5.0, 0.0, -3.0)):
+    def __init__(self, px4_interface, target_altitude=3.0, hold_time=5.0, waypoints=None):
         self.px4 = px4_interface
         self.state = MissionState.INIT
         self.target_altitude = target_altitude
         self.hold_time = hold_time
-        self.nav_target = nav_target
         self.state_start_time = time.time()
 
         self.takeoff_command_sent = False
         self.land_command_sent = False
-        self.navigate_command_sent = False
+
+        self.waypoints = waypoints or [
+            (3.0, 0.0, -3.0),
+            (3.0, 3.0, -3.0),
+            (0.0, 3.0, -3.0)
+        ]
+        self.current_waypoint_index = 0
 
     def set_state(self, new_state: MissionState):
         print(f"[STATE] {self.state.value} -> {new_state.value}")
@@ -34,9 +39,6 @@ class MissionStateMachine:
 
         if new_state == MissionState.TAKEOFF:
             self.takeoff_command_sent = False
-
-        if new_state == MissionState.NAVIGATE:
-            self.navigate_command_sent = False
 
         if new_state == MissionState.LANDING:
             self.land_command_sent = False
@@ -58,11 +60,11 @@ class MissionStateMachine:
             elif self.state == MissionState.OFFBOARD_PREP:
                 self.handle_offboard_prep()
 
+            elif self.state == MissionState.WAYPOINT_MISSION:
+                self.handle_waypoint_mission()
+
             elif self.state == MissionState.HOLD:
                 self.handle_hold()
-
-            elif self.state == MissionState.NAVIGATE:
-                self.handle_navigate()
 
             elif self.state == MissionState.LANDING:
                 self.handle_landing()
@@ -79,8 +81,8 @@ class MissionStateMachine:
 
         except Exception as e:
             print(f"[ERROR] State machine hatası: {e}")
-            self.set_state(MissionState.FAILSAFE)
-            return True
+            self.state = MissionState.FAILSAFE
+            return False
 
     def handle_init(self):
         hb = self.px4.read_heartbeat_status()
@@ -144,16 +146,12 @@ class MissionStateMachine:
 
         if self.state_elapsed() >= self.hold_time:
             print("[HOLD] Bekleme tamamlandı.")
+            self.px4.set_auto_land_mode()
+            time.sleep(1)
             self.set_state(MissionState.LANDING)
 
     def handle_landing(self):
-        if not self.land_command_sent:
-            print("[LANDING] Land komutu gönderiliyor...")
-            self.px4.land()
-            self.land_command_sent = True
-            time.sleep(1)
-
-        alt = self.px4.get_relative_altitude(timeout=2)
+        alt = self.px4.get_relative_altitude(timeout=0.2)
         if alt is None:
             print("[LANDING] İrtifa verisi yok.")
             return
@@ -165,49 +163,63 @@ class MissionStateMachine:
             self.set_state(MissionState.COMPLETE)
             return
 
-        if self.state_elapsed() > 20:
+        if self.state_elapsed() > 30:
             print("[LANDING] Timeout - iniş tamamlanamadı.")
             self.set_state(MissionState.FAILSAFE)
 
-    def handle_navigate(self):
-        target_x, target_y, target_z = self.nav_target
+
+    def handle_offboard_prep(self):
+        if not self.waypoints:
+            print("[OFFBOARD_PREP] Waypoint tanımlı değil.")
+            self.set_state(MissionState.FAILSAFE)
+            return
+
+        target_x, target_y, target_z = self.waypoints[self.current_waypoint_index]
 
         self.px4.go_to_local_position(target_x, target_y, target_z)
 
-        pos = self.px4.get_local_position(timeout=2)
-        if pos is None:
-            print("[NAVIGATE] Konum verisi yok.")
+        pos = self.px4.get_local_position(timeout=0.2)
+        if pos is not None:
+            print(f"[OFFBOARD_PREP] Setpoint akışı gönderiliyor... x={pos['x']:.2f}, y={pos['y']:.2f}, z={pos['z']:.2f}")
+
+        if self.state_elapsed() > 2.5:
+            self.px4.set_offboard_mode()
+            print("[OFFBOARD_PREP] OFFBOARD mod istendi.")
+            self.set_state(MissionState.WAYPOINT_MISSION)
+
+    def handle_waypoint_mission(self):
+        if self.current_waypoint_index >= len(self.waypoints):
+            print("[WAYPOINT] Tüm waypoint'ler tamamlandı.")
+            self.px4.set_auto_loiter_mode()
+            time.sleep(1)
+            self.set_state(MissionState.HOLD)
             return
 
-        print(f"[NAVIGATE] Mevcut konum: x={pos['x']:.2f}, y={pos['y']:.2f}, z={pos['z']:.2f}")
+        target_x, target_y, target_z = self.waypoints[self.current_waypoint_index]
+
+        self.px4.go_to_local_position(target_x, target_y, target_z)
+
+        pos = self.px4.get_local_position(timeout=0.2)
+        if pos is None:
+            print("[WAYPOINT] Konum verisi yok.")
+            return
+
+        print(
+            f"[WAYPOINT {self.current_waypoint_index + 1}/{len(self.waypoints)}] "
+            f"Mevcut: x={pos['x']:.2f}, y={pos['y']:.2f}, z={pos['z']:.2f} | "
+            f"Hedef: x={target_x:.2f}, y={target_y:.2f}, z={target_z:.2f}"
+        )
 
         dx = abs(pos["x"] - target_x)
         dy = abs(pos["y"] - target_y)
         dz = abs(pos["z"] - target_z)
 
         if dx < 0.5 and dy < 0.5 and dz < 0.5:
-            print("[NAVIGATE] Hedef noktaya ulaşıldı.")
-            self.set_state(MissionState.HOLD)
+            print(f"[WAYPOINT] {self.current_waypoint_index + 1}. waypoint'e ulaşıldı.")
+            self.current_waypoint_index += 1
+            time.sleep(1)
             return
 
-        if self.state_elapsed() > 20:
-            print("[NAVIGATE] Timeout - hedef noktaya ulaşılamadı.")
+        if self.state_elapsed() > 60:
+            print("[WAYPOINT] Timeout - waypoint görevi tamamlanamadı.")
             self.set_state(MissionState.FAILSAFE)
-
-
-    def handle_offboard_prep(self):
-        target_x, target_y, target_z = self.nav_target
-
-        # PX4 OFFBOARD'a geçmeden önce setpoint akışı görmek ister
-        self.px4.go_to_local_position(target_x, target_y, target_z)
-
-        pos = self.px4.get_local_position(timeout=2)
-        if pos is not None:
-            print(f"[OFFBOARD_PREP] Setpoint akışı gönderiliyor... x={pos['x']:.2f}, y={pos['y']:.2f}, z={pos['z']:.2f}")
-
-        # Yaklaşık 1 saniye setpoint aktıktan sonra OFFBOARD'a geç
-        if self.state_elapsed() > 1.0:
-            self.px4.set_offboard_mode()
-            print("[OFFBOARD_PREP] OFFBOARD mod istendi.")
-            self.set_state(MissionState.NAVIGATE)
-
