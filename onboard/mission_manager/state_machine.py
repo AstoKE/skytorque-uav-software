@@ -15,22 +15,24 @@ class MissionState(Enum):
 
 
 class MissionStateMachine:
-    def __init__(self, px4_interface, target_altitude=3.0, hold_time=5.0, waypoints=None):
+    def __init__(self, px4_interface, target_altitude, hold_time, waypoints):
+
         self.px4 = px4_interface
-        self.state = MissionState.INIT
         self.target_altitude = target_altitude
         self.hold_time = hold_time
+        self.waypoints = waypoints
+
+        self.current_waypoint_index = 0
+
+        self.state = MissionState.INIT
         self.state_start_time = time.time()
+
+        self.waypoint_reach_threshold = 0.5
+        self.waypoint_timeout = 20.0
+        self.current_waypoint_start_time = None
 
         self.takeoff_command_sent = False
         self.land_command_sent = False
-
-        self.waypoints = waypoints or [
-            (3.0, 0.0, -3.0),
-            (3.0, 3.0, -3.0),
-            (0.0, 3.0, -3.0)
-        ]
-        self.current_waypoint_index = 0
 
     def set_state(self, new_state: MissionState):
         print(f"[STATE] {self.state.value} -> {new_state.value}")
@@ -39,6 +41,9 @@ class MissionStateMachine:
 
         if new_state == MissionState.TAKEOFF:
             self.takeoff_command_sent = False
+
+        if new_state == MissionState.WAYPOINT_MISSION:
+            self.current_waypoint_start_time = time.time()
 
         if new_state == MissionState.LANDING:
             self.land_command_sent = False
@@ -214,12 +219,20 @@ class MissionStateMachine:
         dy = abs(pos["y"] - target_y)
         dz = abs(pos["z"] - target_z)
 
-        if dx < 0.5 and dy < 0.5 and dz < 0.5:
+        if (
+            dx < self.waypoint_reach_threshold
+            and dy < self.waypoint_reach_threshold
+            and dz < self.waypoint_reach_threshold
+        ):
             print(f"[WAYPOINT] {self.current_waypoint_index + 1}. waypoint'e ulaşıldı.")
             self.current_waypoint_index += 1
+            self.current_waypoint_start_time = time.time()
             time.sleep(1)
             return
 
-        if self.state_elapsed() > 60:
-            print("[WAYPOINT] Timeout - waypoint görevi tamamlanamadı.")
-            self.set_state(MissionState.FAILSAFE)
+        if self.current_waypoint_start_time is not None:
+            elapsed = time.time() - self.current_waypoint_start_time
+
+            if elapsed > self.waypoint_timeout:
+                print(f"[WAYPOINT] Timeout - {self.current_waypoint_index + 1}. waypoint'e ulaşılamadı.")
+                self.set_state(MissionState.FAILSAFE)

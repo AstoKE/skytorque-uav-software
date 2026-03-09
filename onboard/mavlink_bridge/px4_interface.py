@@ -205,6 +205,7 @@ class PX4Interface:
             0, 0, 0, 0, 0
         )
 
+
     def set_auto_loiter_mode(self):
         print("AUTO_LOITER moda geçiş komutu gönderiliyor...")
 
@@ -219,6 +220,7 @@ class PX4Interface:
             0, 0, 0, 0
         )
 
+
     def set_auto_land_mode(self):
         print("AUTO_LAND moda geçiş komutu gönderiliyor...")
 
@@ -232,3 +234,9 @@ class PX4Interface:
             6,   # PX4_CUSTOM_SUB_MODE_AUTO_LAND
             0, 0, 0, 0
         )
+
+    def get_custom_mode(self):
+        hb = self.read_heartbeat_status()
+        if hb is None:
+            return None
+        return hb["custom_mode"]

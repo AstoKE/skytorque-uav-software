@@ -48,19 +48,43 @@ Python kodu → görev yazılımı
 Proje Yapısı
 skytorque-uav-software/
 │
+├── README.md
+├── requirements.txt
+├── config/
+│   └── mission.yaml
+├── docs/
 ├── onboard/
 │   ├── main.py
 │   ├── test_arm.py
 │   ├── test_disarm.py
+│   ├── test_mini_mission.py
 │   ├── test_takeoff.py
+│   ├── ARMING
+│   ├── COMPLETE
+│   ├── HOLD
+│   ├── LANDING
+│   ├── TAKEOFF
 │   ├── mavlink_bridge/
 │   │   └── px4_interface.py
 │   └── mission_manager/
 │       └── state_machine.py
-│
-├── config/
-├── logs/
-└── README.md
+├── simulation/
+│   ├── gazebo_world/
+│   └── px4_sitl/
+├── tests/
+│   ├── test_px4_raw_messages.py
+│   ├── tests_px4_connection.py
+│   └── tests_px4_telemetry.py
+└── tools/
+
+docs/: Dokümantasyon dosyaları
+
+simulation/: Simülasyon ortamı dosyaları
+
+tests/: Test scriptleri
+
+tools/: Yardımcı araçlar
+
 Gereksinimler
 
 Aşağıdaki yazılımların kurulu olması gerekir:
@@ -77,7 +101,7 @@ pymavlink
 
 Python bağımlılığı kurulumu:
 
-pip install pymavlink
+pip install -r requirements.txt
 PX4 SITL ve Gazebo Çalıştırma
 
 Önce PX4 simülasyonu başlatılır:
@@ -141,6 +165,11 @@ Araç arm edilir ve heartbeat üzerinden kontrol edilir.
 python3 test_takeoff.py
 
 Araç hedef irtifaya kalkar ve irtifa bilgisi terminalde izlenir.
+
+4. Mini mission testi
+python3 test_mini_mission.py
+
+Küçük bir görev akışı test edilir.
 
 MAVLink Bağlantı Bilgisi
 
